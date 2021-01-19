@@ -1,0 +1,128 @@
+---
+title: "Cluster analysis of college major and salary in R"
+author: "Jay Khedekar"
+output: 
+    html_document:
+        highlight: zenburn
+---
+<style type="text/css">
+
+code.r{
+  font-size: 16px;
+}
+
+</style>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Choosing a major can be a daunting task. I have worked on clustering analysis to figure out high paying majors based on salary data in initial, mid and end career stages.
+
+
+
+```{r packages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(factoextra)
+library(cluster)
+```
+
+```{r, warning=FALSE, message=FALSE}
+df <- readr::read_csv("main_data.csv", col_names = c("College.Major", "Starting.Median.Salary", 
+                                                     "Mid.Career.Median.Salary", "Career.Percent.Growth", 
+                                                     "Percentile.10", "Percentile.25", "Percentile.75", 
+                                                     "Percentile.90"), skip=1)
+
+head(df)
+```
+
+## Preparing data for clustering analysis
+```{r, warning=FALSE, message=FALSE}
+k.means.data <- df %>% 
+    select(c("Starting.Median.Salary", "Mid.Career.Median.Salary", "Percentile.10", "Percentile.90")) %>%
+    scale()
+
+head(k.means.data)
+```
+
+```{r, warning=FALSE, fig.align='center'}
+fviz_nbclust(k.means.data, kmeans , method = "wss")
+```
+
+```{r, warning=FALSE, fig.align='center'}
+fviz_nbclust(k.means.data, kmeans , method = "silhouette")
+```
+
+```{r, warning=FALSE}
+gap_stat <- cluster::clusGap(k.means.data, FUNcluster = kmeans, nstart=25, K.max=10, B=50)
+
+```
+
+```{r, warning=FALSE, fig.align='center'}
+fviz_gap_stat(gap_stat)
+
+```
+
+## K-Means clustering
+```{r, warning=FALSE}
+num_cluster <- 3
+set.seed(3)
+k_means <- kmeans(k.means.data, centers=num_cluster, iter.max = 15, nstart = 25)
+```
+
+
+```{r, warning=FALSE}
+df.labelled <- df %>% 
+    mutate(clusters = k_means$cluster)
+```
+
+```{r, warning=FALSE, fig.align='center'}
+ggplot(df.labelled, aes(Mid.Career.Median.Salary, Starting.Median.Salary, color=clusters))+
+    geom_point()+
+    xlab("Median Salary mid career")+
+    ylab("Median salary start career")+
+    scale_x_continuous(labels= scales::dollar)+
+    scale_y_continuous(labels= scales::dollar)
+```
+
+## Arranging data by factoring percentile category
+```{r, warning=FALSE}
+df_perc <- df.labelled%>% select(c("College.Major", "Percentile.10", "Percentile.25", "Mid.Career.Median.Salary", "Percentile.75", "Percentile.90", "clusters")) %>%
+    gather(key = "Percentile", value="Salary", -c(College.Major, clusters))%>%
+    mutate(Percentile=factor(Percentile,levels=c('Percentile.10','Percentile.25',
+                                                 'Mid.Career.Median.Salary',
+                                                 'Percentile.75','Percentile.90')))
+```
+
+```{r, warning=FALSE, fig.align='center'}
+ggplot(df_perc[df_perc$clusters==1,], aes(x=Percentile,y=Salary, group=College.Major, color=College.Major, order=Salary)) +
+    geom_point() +
+    geom_line() +
+    ggtitle('Cluster 1:  The Liberal Arts') +
+    theme(axis.text.x = element_text(size=7, angle=25))
+```
+
+```{r, warning=FALSE, fig.align='center'}
+ggplot(df_perc[df_perc$clusters==2,], aes(x=Percentile,y=Salary, group=College.Major, color=College.Major, order=Salary)) +
+    geom_point() +
+    geom_line() +
+    ggtitle('Cluster 2:  The Goldilocks') +
+    theme(axis.text.x = element_text(size=7, angle=25))
+```
+
+```{r, warning=FALSE, fig.align='center'}
+ggplot(df_perc[df_perc$clusters==3,], aes(x=Percentile,y=Salary, group=College.Major, color=College.Major, order=Salary)) +
+    geom_point() +
+    geom_line() +
+    ggtitle('Cluster 2: The Over Achievers') +
+    theme(axis.text.x = element_text(size=7, angle=25))
+```
+
+## High paying careers
+```{r, warning=FALSE}
+arrange(df.labelled,desc(Career.Percent.Growth))
+```
